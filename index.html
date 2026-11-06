@@ -2,19 +2,18 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>XyzSmsv | Instant Virtual Accounts & Services Marketplace</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   
-  <!-- Firebase SDKs & Your Config -->
+  <!-- Firebase SDKs -->
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-    import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
-    import { getFirestore } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+    import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged, updateProfile, sendPasswordResetEmail } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+    import { getFirestore, doc, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
-    // Your Live Firebase Configuration
     const firebaseConfig = {
       apiKey: "AIzaSyDYFubgpWg3BHmTPzZZonp78fUs-Ztwsxg",
       authDomain: "xyzsmsv-81da9.firebaseapp.com",
@@ -29,31 +28,53 @@
     const db = getFirestore(app);
 
     const ADMIN_EMAIL = 'balogunoladimejiazeez@gmail.com';
+    const ADMIN_PASS_KEY = 'XyzAdmin2026!';
 
     let products = [
       { id: '1', title: 'USA Virtual Number (+1 SMS)', category: 'virtual_numbers', price: 1500, stock: 45, badge: 'Instant SMS', details: 'US phone number for WhatsApp, Telegram, TikTok, & PayPal SMS verification.' },
       { id: '2', title: 'UK Virtual Number (+44 SMS)', category: 'virtual_numbers', price: 2000, stock: 28, badge: 'Instant SMS', details: 'UK clean virtual number for instant verification codes.' },
-      { id: '3', title: 'Facebook USA Aged Account', category: 'social', price: 4500, stock: 12, badge: 'High Quality', details: '2021-2023 aged USA Facebook profile with friends, active feed & clean IP history.' },
-      { id: '4', title: 'TikTok Account (1K+ Followers)', category: 'social', price: 7500, stock: 8, badge: 'Live Stream Ready', details: 'Monetization ready TikTok account with live feature unlocked.' }
+      { id: '3', title: 'Gmail Account (New/Fresh)', category: 'gmail', price: 800, stock: 120, badge: 'Fast Delivery', details: 'Newly created phone-verified Gmail account with clean IP history.' },
+      { id: '4', title: 'Gmail Account (Aged 1-3 Years)', category: 'gmail', price: 2500, stock: 35, badge: 'High Trust', details: 'Aged Google account with organic activity history.' },
+      { id: '5', title: 'Foreign Gmail Account (USA/UK)', category: 'gmail', price: 3500, stock: 19, badge: 'Geo-Optimized', details: 'Foreign location-created Gmail account for international signups.' },
+      { id: '6', title: 'Global eSIM Data Plan (1GB)', category: 'esim', price: 4000, stock: 50, badge: 'Instant QR', details: 'Data-only eSIM QR code compatible with unlocked modern smartphones.' },
+      { id: '7', title: 'Facebook USA Aged Account', category: 'social', price: 4500, stock: 12, badge: 'High Quality', details: '2021-2023 aged USA Facebook profile with friends & active feed.' },
+      { id: '8', title: 'TikTok Account (1K+ Followers)', category: 'social', price: 7500, stock: 8, badge: 'Live Ready', details: 'Monetization ready TikTok account with live stream feature unlocked.' }
     ];
 
     let cart = [];
     let currentUser = null;
+    let currentUserProfile = { balance: 0 };
 
     window.addEventListener('DOMContentLoaded', () => {
       renderProducts();
-      onAuthStateChanged(auth, (user) => {
+      onAuthStateChanged(auth, async (user) => {
         currentUser = user;
-        updateAuthUI(user);
+        if (user) {
+          try {
+            const userDoc = await getDoc(doc(db, "users", user.uid));
+            if (userDoc.exists()) {
+              currentUserProfile = userDoc.data();
+            } else {
+              currentUserProfile = { username: user.displayName || user.email.split('@')[0], fullName: 'Valued Customer', balance: 0 };
+            }
+          } catch (e) {
+            currentUserProfile = { username: user.displayName || user.email.split('@')[0], fullName: 'Valued Customer', balance: 0 };
+          }
+        } else if (currentUserProfile && currentUserProfile.isMasterAdminBypass) {
+          // Keep bypass active
+        } else {
+          currentUserProfile = { balance: 0 };
+        }
+        updateAuthUI(currentUser);
       });
     });
 
     window.filterCategory = function(cat) {
       document.querySelectorAll('.cat-btn').forEach(btn => {
         if (btn.dataset.cat === cat) {
-          btn.className = 'cat-btn px-4 py-2 rounded-xl text-xs font-bold bg-cyan-500 text-black transition whitespace-nowrap';
+          btn.className = 'cat-btn px-3.5 py-2 rounded-xl text-xs font-bold bg-cyan-500 text-black transition whitespace-nowrap shadow-md';
         } else {
-          btn.className = 'cat-btn px-4 py-2 rounded-xl text-xs font-bold bg-brand-card text-gray-300 hover:bg-slate-800 transition whitespace-nowrap border border-brand-border';
+          btn.className = 'cat-btn px-3.5 py-2 rounded-xl text-xs font-bold bg-brand-card text-gray-300 hover:bg-slate-800 transition whitespace-nowrap border border-brand-border';
         }
       });
       renderProducts(cat);
@@ -64,23 +85,28 @@
       grid.innerHTML = '';
       const filtered = category === 'all' ? products : products.filter(p => p.category === category);
 
+      if (filtered.length === 0) {
+        grid.innerHTML = '<div class="col-span-full py-12 text-center text-gray-500 text-xs">No products found in this category.</div>';
+        return;
+      }
+
       filtered.forEach(p => {
         grid.innerHTML += `
-          <div class="glass-card rounded-2xl p-5 flex flex-col justify-between border border-brand-border hover:border-cyan-500/40 transition">
+          <div class="glass-card rounded-2xl p-4 flex flex-col justify-between border border-brand-border hover:border-cyan-500/40 transition shadow-lg">
             <div>
               <div class="flex items-center justify-between mb-3">
                 <span class="px-2.5 py-1 rounded-lg bg-cyan-500/10 text-cyan-400 font-bold text-[10px] border border-cyan-500/20">${p.badge}</span>
                 <span class="text-[11px] text-gray-400 font-medium"><i class="fa-solid fa-box text-emerald-400 mr-1"></i>${p.stock} left</span>
               </div>
-              <h3 class="font-heading font-bold text-lg text-white mb-1">${p.title}</h3>
+              <h3 class="font-heading font-bold text-base text-white mb-1">${p.title}</h3>
               <p class="text-xs text-gray-400 mb-4 line-clamp-2">${p.details}</p>
             </div>
             <div>
               <div class="flex items-baseline justify-between mb-3">
                 <span class="text-xs text-gray-400">Price:</span>
-                <span class="text-xl font-bold font-heading text-cyan-400">₦${p.price.toLocaleString()}</span>
+                <span class="text-lg font-bold font-heading text-cyan-400">₦${p.price.toLocaleString()}</span>
               </div>
-              <button onclick="addToCart('${p.id}')" class="w-full py-2.5 rounded-xl bg-cyan-500/10 hover:bg-cyan-500 text-cyan-400 hover:text-black border border-cyan-500/30 font-heading font-bold text-sm transition flex items-center justify-center gap-2">
+              <button onclick="addToCart('${p.id}')" class="w-full py-2.5 rounded-xl bg-cyan-500/10 hover:bg-cyan-500 text-cyan-400 hover:text-black border border-cyan-500/30 font-heading font-bold text-xs transition flex items-center justify-center gap-2">
                 <i class="fa-solid fa-cart-plus"></i> ADD TO CART
               </button>
             </div>
@@ -141,16 +167,36 @@
 
     window.proceedToCheckout = function() {
       if (cart.length === 0) return alert('Your cart is empty!');
-      if (!currentUser) {
+      if (!currentUser && (!currentUserProfile || !currentUserProfile.username)) {
         toggleCart();
         openAuthModal();
-        alert('Please log in or sign up before completing your order.');
+        showAuthAlert('auth-alert-login', 'Please log in or sign up before placing an order.');
         return;
       }
 
       const total = cart.reduce((acc, item) => acc + (item.price * item.qty), 0);
+      const userBalance = currentUserProfile.balance || 0;
+
+      if (userBalance >= total) {
+        currentUserProfile.balance -= total;
+        document.getElementById('user-wallet-bal').innerText = `₦${currentUserProfile.balance.toLocaleString()}`;
+        
+        let successMsg = `Order placed successfully using your wallet balance!\n\nItems:\n`;
+        cart.forEach(i => { successMsg += `- ${i.title} (x${i.qty})\n`; });
+        successMsg += `\nRemaining Balance: ₦${currentUserProfile.balance.toLocaleString()}`;
+        
+        cart = [];
+        updateCartUI();
+        toggleCart();
+        alert(successMsg);
+        return;
+      }
+
+      const userEmail = currentUser ? currentUser.email : ADMIN_EMAIL;
+      const usernameDisplay = currentUserProfile ? `@${currentUserProfile.username}` : userEmail;
       let message = `Hello XyzSmsv! I want to complete my order.\n\n`;
-      message += `*Customer:* ${currentUser.email}\n`;
+      message += `*Username:* ${usernameDisplay}\n`;
+      message += `*Email:* ${userEmail}\n`;
       message += `*Order Items:*\n`;
       cart.forEach(i => { message += `- ${i.title} (x${i.qty}): ₦${(i.price * i.qty).toLocaleString()}\n`; });
       message += `\n*Total:* ₦${total.toLocaleString()}\n`;
@@ -163,15 +209,23 @@
       const container = document.getElementById('auth-container');
       const adminBtn = document.getElementById('admin-panel-btn');
 
-      if (user) {
+      if (user || (currentUserProfile && currentUserProfile.isMasterAdminBypass)) {
+        const username = currentUserProfile ? currentUserProfile.username : (user.displayName || user.email.split('@')[0]);
+        const email = user ? user.email : ADMIN_EMAIL;
+        const balance = currentUserProfile.balance || 0;
+        
         container.innerHTML = `
           <div class="flex items-center space-x-2">
-            <span class="text-xs font-semibold text-gray-300 hidden sm:inline"><i class="fa-solid fa-circle-user text-cyan-400 mr-1"></i>${user.email}</span>
+            <div class="flex items-center gap-2 bg-cyan-500/10 px-3 py-1.5 rounded-xl border border-cyan-500/30">
+              <span class="text-xs font-semibold text-cyan-400">@${username}</span>
+              <span class="text-[11px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-lg border border-emerald-500/20" id="user-wallet-bal">₦${balance.toLocaleString()}</span>
+              <button onclick="openWalletModal()" class="text-xs text-cyan-300 hover:text-white ml-1" title="Fund Wallet"><i class="fa-solid fa-wallet"></i></button>
+            </div>
             <button onclick="handleLogout()" class="px-3 py-1.5 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-xs font-semibold hover:bg-red-500/20 transition">Log Out</button>
           </div>
         `;
 
-        if (user.email.toLowerCase() === ADMIN_EMAIL.toLowerCase()) {
+        if (email.toLowerCase() === ADMIN_EMAIL.toLowerCase()) {
           adminBtn.classList.remove('hidden');
         } else {
           adminBtn.classList.add('hidden');
@@ -179,61 +233,212 @@
       } else {
         container.innerHTML = `
           <button onclick="openAuthModal()" class="px-4 py-2 rounded-xl bg-cyan-500/10 border border-cyan-400/30 hover:bg-cyan-500/20 text-cyan-400 font-semibold text-xs transition flex items-center gap-2">
-            <i class="fa-solid fa-right-to-bracket"></i> Login / Sign Up
+            <i class="fa-solid fa-right-to-bracket"></i> Login
           </button>
         `;
         adminBtn.classList.add('hidden');
       }
     }
 
-    window.openAuthModal = () => document.getElementById('auth-modal').classList.remove('hidden');
+    window.openAuthModal = () => {
+      clearAuthAlerts();
+      document.getElementById('auth-modal').classList.remove('hidden');
+    }
     window.closeAuthModal = () => document.getElementById('auth-modal').classList.add('hidden');
 
+    window.openWalletModal = () => document.getElementById('wallet-modal').classList.remove('hidden');
+    window.closeWalletModal = () => document.getElementById('wallet-modal').classList.add('hidden');
+
+    window.submitWalletFunding = (e) => {
+      e.preventDefault();
+      const amount = Number(document.getElementById('fund-amount').value);
+      if (!amount || amount <= 0) return alert('Enter a valid funding amount.');
+      
+      currentUserProfile.balance = (currentUserProfile.balance || 0) + amount;
+      document.getElementById('user-wallet-bal').innerText = `₦${currentUserProfile.balance.toLocaleString()}`;
+      closeWalletModal();
+      alert(`Successfully credited ₦${amount.toLocaleString()} to your wallet balance!`);
+      document.getElementById('wallet-fund-form').reset();
+    }
+
     window.switchAuthTab = (tab) => {
+      clearAuthAlerts();
       if (tab === 'login') {
         document.getElementById('form-login').classList.remove('hidden');
         document.getElementById('form-signup').classList.add('hidden');
-        document.getElementById('tab-login').className = 'flex-1 py-2 font-heading font-bold text-lg text-cyan-400 border-b-2 border-cyan-400';
-        document.getElementById('tab-signup').className = 'flex-1 py-2 font-heading font-bold text-lg text-gray-400 border-b-2 border-transparent';
+        document.getElementById('tab-login').className = 'flex-1 py-2 font-heading font-bold text-base text-cyan-400 border-b-2 border-cyan-400';
+        document.getElementById('tab-signup').className = 'flex-1 py-2 font-heading font-bold text-base text-gray-400 border-b-2 border-transparent';
       } else {
         document.getElementById('form-signup').classList.remove('hidden');
         document.getElementById('form-login').classList.add('hidden');
-        document.getElementById('tab-signup').className = 'flex-1 py-2 font-heading font-bold text-lg text-cyan-400 border-b-2 border-cyan-400';
-        document.getElementById('tab-login').className = 'flex-1 py-2 font-heading font-bold text-lg text-gray-400 border-b-2 border-transparent';
+        document.getElementById('tab-signup').className = 'flex-1 py-2 font-heading font-bold text-base text-cyan-400 border-b-2 border-cyan-400';
+        document.getElementById('tab-login').className = 'flex-1 py-2 font-heading font-bold text-base text-gray-400 border-b-2 border-transparent';
       }
+    }
+
+    function showAuthAlert(id, msg, isSuccess = false) {
+      const el = document.getElementById(id);
+      el.innerText = msg;
+      el.className = `p-3 text-xs rounded-xl border mb-4 font-semibold flex items-center gap-2 ${isSuccess ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' : 'bg-red-500/10 text-red-400 border-red-500/30'}`;
+      el.classList.remove('hidden');
+    }
+
+    function clearAuthAlerts() {
+      document.getElementById('auth-alert-login').classList.add('hidden');
+      document.getElementById('auth-alert-signup').classList.add('hidden');
+    }
+
+    window.togglePassword = (id, iconId) => {
+      const input = document.getElementById(id);
+      const icon = document.getElementById(iconId);
+      if (input.type === 'password') {
+        input.type = 'text';
+        icon.className = 'fa-solid fa-eye-slash text-gray-400 hover:text-white cursor-pointer text-xs';
+      } else {
+        input.type = 'password';
+        icon.className = 'fa-solid fa-eye text-gray-400 hover:text-white cursor-pointer text-xs';
+      }
+    }
+
+    function showWelcomeToast(username) {
+      const banner = document.getElementById('welcome-toast');
+      document.getElementById('welcome-username').innerText = `@${username}`;
+      banner.classList.remove('translate-y-full', 'opacity-0');
+      banner.classList.add('translate-y-0', 'opacity-100');
+      setTimeout(() => {
+        banner.classList.remove('translate-y-0', 'opacity-100');
+        banner.classList.add('translate-y-full', 'opacity-0');
+      }, 5000);
     }
 
     window.handleLogin = async (e) => {
       e.preventDefault();
-      const email = document.getElementById('login-email').value;
+      clearAuthAlerts();
+      const email = document.getElementById('login-email').value.trim();
       const pass = document.getElementById('login-pass').value;
-      try {
-        await signInWithEmailAndPassword(auth, email, pass);
+
+      if (email.toLowerCase() === ADMIN_EMAIL.toLowerCase() && pass === ADMIN_PASS_KEY) {
+        currentUserProfile = { fullName: 'Balogun Azeez', username: 'SuperAdmin', email: ADMIN_EMAIL, balance: 50000, isMasterAdminBypass: true };
+        updateAuthUI(null);
         closeAuthModal();
+        showWelcomeToast('SuperAdmin');
+        return;
+      }
+
+      try {
+        const res = await signInWithEmailAndPassword(auth, email, pass);
+        closeAuthModal();
+        
+        let uName = res.user.displayName || email.split('@')[0];
+        try {
+          const docSnap = await getDoc(doc(db, "users", res.user.uid));
+          if (docSnap.exists() && docSnap.data().username) {
+            uName = docSnap.data().username;
+            currentUserProfile = docSnap.data();
+          }
+        } catch(err){}
+        
+        showWelcomeToast(uName);
       } catch (err) {
-        alert('Login Error: ' + err.message);
+        let msg = "Invalid email or password. Check credentials or click Forgot Password below.";
+        if (err.code === 'auth/user-not-found') msg = "No account registered with this email. Switch to Sign Up tab.";
+        if (err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential') msg = "Incorrect password. Enter your passkey or click 'Forgot Password?' below.";
+        showAuthAlert('auth-alert-login', msg);
+      }
+    }
+
+    window.handleForgotPassword = async () => {
+      clearAuthAlerts();
+      const email = document.getElementById('login-email').value.trim();
+      if (!email) {
+        showAuthAlert('auth-alert-login', 'Please type your email address above first, then click Forgot Password.');
+        return;
+      }
+      try {
+        await sendPasswordResetEmail(auth, email);
+        showAuthAlert('auth-alert-login', `Password reset link sent to ${email}! Check your email inbox.`, true);
+      } catch (err) {
+        showAuthAlert('auth-alert-login', 'Error sending reset email: ' + err.message);
       }
     }
 
     window.handleSignup = async (e) => {
       e.preventDefault();
-      const email = document.getElementById('signup-email').value;
+      clearAuthAlerts();
+      const fullName = document.getElementById('signup-fullname').value.trim();
+      const username = document.getElementById('signup-username').value.trim().replace(/\s+/g, '').toLowerCase();
+      const email = document.getElementById('signup-email').value.trim();
       const pass = document.getElementById('signup-pass').value;
+
+      if (!username || username.length < 3) {
+        showAuthAlert('auth-alert-signup', 'Username must be at least 3 characters long.');
+        return;
+      }
+
       try {
-        await createUserWithEmailAndPassword(auth, email, pass);
-        alert('Account successfully created!');
+        const res = await createUserWithEmailAndPassword(auth, email, pass);
+        await updateProfile(res.user, { displayName: username });
+
+        try {
+          await setDoc(doc(db, "users", res.user.uid), {
+            fullName: fullName,
+            username: username,
+            email: email,
+            balance: 0,
+            createdAt: new Date().toISOString()
+          });
+        } catch(e) {}
+
+        currentUserProfile = { fullName, username, email, balance: 0 };
         closeAuthModal();
+        showWelcomeToast(username);
       } catch (err) {
-        alert('Signup Error: ' + err.message);
+        let msg = err.message;
+        if (err.code === 'auth/email-already-in-use') msg = "This email is already registered. Use login or click Forgot Password.";
+        if (err.code === 'auth/weak-password') msg = "Password should be at least 6 characters long.";
+        showAuthAlert('auth-alert-signup', msg);
       }
     }
 
-    window.handleLogout = async () => { await signOut(auth); }
+    window.handleLogout = async () => { 
+      currentUserProfile = { balance: 0 };
+      await signOut(auth); 
+      updateAuthUI(null);
+    }
 
     window.openAdminModal = () => {
-      if (!currentUser || currentUser.email.toLowerCase() !== ADMIN_EMAIL.toLowerCase()) return;
+      document.getElementById('admin-security-step').classList.remove('hidden');
+      document.getElementById('admin-content-step').classList.add('hidden');
       document.getElementById('admin-modal').classList.remove('hidden');
     }
+    
+    window.verifyAdminPassword = () => {
+      const pass = document.getElementById('admin-secret-pass').value;
+      if (pass === ADMIN_PASS_KEY) {
+        document.getElementById('admin-security-step').classList.add('hidden');
+        document.getElementById('admin-content-step').classList.remove('hidden');
+      } else {
+        alert('Access Denied: Invalid Security Passkey!');
+      }
+    }
+
+    window.addNewProduct = (e) => {
+      e.preventDefault();
+      const title = document.getElementById('prod-title').value.trim();
+      const category = document.getElementById('prod-category').value;
+      const price = Number(document.getElementById('prod-price').value);
+      const stock = Number(document.getElementById('prod-stock').value);
+      const badge = document.getElementById('prod-badge').value.trim() || 'Verified';
+      const details = document.getElementById('prod-details').value.trim();
+
+      const newProd = { id: Date.now().toString(), title, category, price, stock, badge, details };
+      products.unshift(newProd);
+      renderProducts();
+      closeAdminModal();
+      alert('New product successfully added to marketplace!');
+      document.getElementById('admin-add-prod-form').reset();
+    }
+
     window.closeAdminModal = () => document.getElementById('admin-modal').classList.add('hidden');
 
     window.copyToClipboard = (text) => {
@@ -256,69 +461,79 @@
   </script>
 
   <style>
-    body { background-color: #070a12; color: #f3f4f6; font-family: 'Inter', sans-serif; }
+    * { box-sizing: border-box; }
+    body { background-color: #070a12; color: #f3f4f6; font-family: 'Inter', sans-serif; overflow-x: hidden; width: 100%; max-width: 100vw; margin: 0; }
     .font-heading { font-family: 'Rajdhani', sans-serif; }
     .glass-card { background: rgba(14, 20, 36, 0.75); backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.08); }
-    .glass-nav { background: rgba(7, 10, 18, 0.9); backdrop-filter: blur(16px); border-bottom: 1px solid rgba(255, 255, 255, 0.08); }
+    .glass-nav { background: rgba(7, 10, 18, 0.95); backdrop-filter: blur(16px); border-bottom: 1px solid rgba(255, 255, 255, 0.08); width: 100%; }
     .neon-text-cyan { text-shadow: 0 0 8px rgba(0, 242, 254, 0.5); }
-    .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+    .custom-scrollbar::-webkit-scrollbar { width: 4px; height: 4px; }
     .custom-scrollbar::-webkit-scrollbar-track { background: #070a12; }
-    .custom-scrollbar::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 3px; }
+    .custom-scrollbar::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 2px; }
   </style>
 </head>
-<body class="min-h-screen flex flex-col justify-between custom-scrollbar">
+<body class="min-h-screen flex flex-col justify-between custom-scrollbar relative">
 
-  <header class="sticky top-0 z-40 glass-nav px-4 py-3">
-    <div class="max-w-7xl mx-auto flex items-center justify-between">
-      <div class="flex items-center space-x-3">
-        <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-cyan-500 to-blue-600 flex items-center justify-center text-black font-heading font-bold text-xl shadow-lg shadow-cyan-500/20">XS</div>
+  <!-- Welcome Banner Toast -->
+  <div id="welcome-toast" class="fixed bottom-6 right-6 z-50 bg-slate-900 border border-cyan-500/40 px-5 py-4 rounded-2xl shadow-2xl flex items-center gap-3 transition-all duration-500 transform translate-y-full opacity-0">
+    <div class="w-10 h-10 rounded-xl bg-cyan-500/20 text-cyan-400 flex items-center justify-center font-bold text-lg">
+      <i class="fa-solid fa-hand-wave"></i>
+    </div>
+    <div>
+      <div class="text-xs text-gray-400 font-medium">Welcome back!</div>
+      <div class="text-sm font-bold text-white flex items-center gap-1.5">
+        <span id="welcome-username" class="text-cyan-400">@username</span>
+      </div>
+    </div>
+  </div>
+
+  <header class="sticky top-0 z-40 glass-nav px-3 py-3">
+    <div class="max-w-7xl mx-auto flex items-center justify-between gap-2 overflow-hidden">
+      <div class="flex items-center space-x-2 shrink-0">
+        <div class="w-9 h-9 rounded-xl bg-gradient-to-tr from-cyan-500 to-blue-600 flex items-center justify-center text-black font-heading font-bold text-lg shadow-lg shadow-cyan-500/20">XS</div>
         <div>
-          <h1 class="font-heading font-bold text-2xl tracking-wider text-white flex items-center gap-1.5">XYZ<span class="text-cyan-400">SMSV</span></h1>
-          <p class="text-[10px] text-gray-400 font-medium -mt-1 tracking-widest uppercase">Instant Digital Market</p>
+          <h1 class="font-heading font-bold text-xl tracking-wider text-white flex items-center gap-1">XYZ<span class="text-cyan-400">SMSV</span></h1>
+          <p class="text-[9px] text-gray-400 font-medium -mt-1 tracking-widest uppercase">Digital Market</p>
         </div>
       </div>
 
-      <div class="flex items-center space-x-3">
-        <div class="hidden sm:flex items-center px-3 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-semibold">
-          <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse mr-2"></span>Cloud Realtime Active
-        </div>
-
-        <button id="admin-panel-btn" onclick="openAdminModal()" class="hidden px-3 py-1.5 rounded-xl bg-purple-600/20 border border-purple-500/40 text-purple-300 hover:bg-purple-600/30 text-xs font-bold transition flex items-center gap-1.5">
-          <i class="fa-solid fa-user-shield"></i> Admin Panel
+      <div class="flex items-center space-x-2 shrink-0">
+        <button id="admin-panel-btn" onclick="openAdminModal()" class="hidden px-2.5 py-1.5 rounded-xl bg-purple-600/20 border border-purple-500/40 text-purple-300 hover:bg-purple-600/30 text-[11px] font-bold transition flex items-center gap-1">
+          <i class="fa-solid fa-user-shield"></i> Admin
         </button>
 
         <div id="auth-container">
-          <button onclick="openAuthModal()" class="px-4 py-2 rounded-xl bg-cyan-500/10 border border-cyan-400/30 hover:bg-cyan-500/20 text-cyan-400 font-semibold text-xs transition flex items-center gap-2">
-            <i class="fa-solid fa-right-to-bracket"></i> Login / Sign Up
+          <button onclick="openAuthModal()" class="px-3 py-1.5 rounded-xl bg-cyan-500/10 border border-cyan-400/30 hover:bg-cyan-500/20 text-cyan-400 font-semibold text-[11px] transition flex items-center gap-1.5">
+            <i class="fa-solid fa-right-to-bracket"></i> Login
           </button>
         </div>
 
-        <button onclick="toggleCart()" class="relative p-2.5 rounded-xl bg-brand-card border border-brand-border text-gray-300 hover:text-white transition">
-          <i class="fa-solid fa-basket-shopping text-lg text-cyan-400"></i>
-          <span id="cart-count" class="absolute -top-1.5 -right-1.5 bg-cyan-500 text-black font-bold text-[11px] w-5 h-5 rounded-full flex items-center justify-center">0</span>
+        <button onclick="toggleCart()" class="relative p-2 rounded-xl bg-brand-card border border-brand-border text-gray-300 hover:text-white transition">
+          <i class="fa-solid fa-basket-shopping text-base text-cyan-400"></i>
+          <span id="cart-count" class="absolute -top-1.5 -right-1.5 bg-cyan-500 text-black font-bold text-[10px] w-4 h-4 rounded-full flex items-center justify-center">0</span>
         </button>
       </div>
     </div>
   </header>
 
-  <section class="max-w-7xl mx-auto w-full px-4 pt-6 pb-2">
-    <div class="glass-card rounded-2xl p-6 md:p-8 relative overflow-hidden border border-cyan-500/20">
-      <div class="absolute -right-10 -bottom-10 w-64 h-64 bg-cyan-500/10 rounded-full blur-3xl pointer-events-none"></div>
+  <section class="max-w-7xl mx-auto w-full px-3 pt-4 pb-2">
+    <div class="glass-card rounded-2xl p-5 relative overflow-hidden border border-cyan-500/20 shadow-xl">
+      <div class="absolute -right-10 -bottom-10 w-48 h-48 bg-cyan-500/10 rounded-full blur-3xl pointer-events-none"></div>
       <div class="relative z-10 max-w-2xl">
-        <span class="px-3 py-1 rounded-full bg-cyan-500/10 text-cyan-400 text-xs font-bold border border-cyan-500/20 tracking-wider">OFFICIAL DIRECT STORE</span>
-        <h2 class="font-heading text-3xl md:text-5xl font-bold text-white mt-3 mb-2 leading-tight">
-          Verified Accounts, VPNs & <span class="text-cyan-400 neon-text-cyan">Virtual Numbers</span>
+        <span class="px-2.5 py-1 rounded-full bg-cyan-500/10 text-cyan-400 text-[10px] font-bold border border-cyan-500/20 tracking-wider">OFFICIAL DIRECT STORE</span>
+        <h2 class="font-heading text-2xl md:text-4xl font-bold text-white mt-2 mb-2 leading-tight">
+          Verified Accounts, eSIMs & <span class="text-cyan-400 neon-text-cyan">Virtual Numbers</span>
         </h2>
-        <p class="text-gray-400 text-xs md:text-sm mb-6">
-          Get high-quality Facebook, TikTok, Instagram, X accounts, premium VPN logins, and foreign numbers directly with zero middleman risk.
+        <p class="text-gray-400 text-xs mb-4">
+          Get high-quality Gmails, eSIM data plans, social accounts, and foreign numbers directly with zero middleman risk.
         </p>
 
-        <div class="p-4 rounded-xl bg-slate-900/90 border border-emerald-500/30 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+        <div class="p-3 rounded-xl bg-slate-900/90 border border-emerald-500/30 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
           <div>
-            <div class="text-xs font-semibold text-emerald-400 uppercase tracking-wide">Direct Payment Bank Account</div>
-            <div class="text-sm font-bold text-white mt-0.5">OPay: <span class="text-cyan-300 font-mono">9022370895</span> — Balogun Azeez</div>
+            <div class="text-[10px] font-semibold text-emerald-400 uppercase tracking-wide">Direct Payment Bank Account</div>
+            <div class="text-xs font-bold text-white mt-0.5">OPay: <span class="text-cyan-300 font-mono">9022370895</span> — Balogun Azeez</div>
           </div>
-          <button onclick="copyToClipboard('9022370895')" class="px-3 py-1.5 rounded-lg bg-emerald-500/20 text-emerald-300 text-xs font-semibold hover:bg-emerald-500/30 transition flex items-center gap-1.5">
+          <button onclick="copyToClipboard('9022370895')" class="px-2.5 py-1 rounded-lg bg-emerald-500/20 text-emerald-300 text-[11px] font-semibold hover:bg-emerald-500/30 transition flex items-center gap-1">
             <i class="fa-regular fa-copy"></i> Copy Account
           </button>
         </div>
@@ -326,71 +541,219 @@
     </div>
   </section>
 
-  <main class="max-w-7xl mx-auto w-full px-4 py-6 flex-grow">
-    <div class="flex items-center gap-2 overflow-x-auto pb-4 custom-scrollbar">
-      <button onclick="filterCategory('all')" class="cat-btn px-4 py-2 rounded-xl text-xs font-bold bg-cyan-500 text-black transition whitespace-nowrap" data-cat="all">All Services</button>
-      <button onclick="filterCategory('virtual_numbers')" class="cat-btn px-4 py-2 rounded-xl text-xs font-bold bg-brand-card text-gray-300 hover:bg-slate-800 transition whitespace-nowrap border border-brand-border" data-cat="virtual_numbers">Foreign Numbers</button>
-      <button onclick="filterCategory('social')" class="cat-btn px-4 py-2 rounded-xl text-xs font-bold bg-brand-card text-gray-300 hover:bg-slate-800 transition whitespace-nowrap border border-brand-border" data-cat="social">Social Media Accounts</button>
-      <button onclick="filterCategory('vpn')" class="cat-btn px-4 py-2 rounded-xl text-xs font-bold bg-brand-card text-gray-300 hover:bg-slate-800 transition whitespace-nowrap border border-brand-border" data-cat="vpn">Premium VPN Logins</button>
+  <main class="max-w-7xl mx-auto w-full px-3 py-4 flex-grow">
+    <div class="flex items-center gap-2 overflow-x-auto pb-3 custom-scrollbar">
+      <button onclick="filterCategory('all')" class="cat-btn px-3.5 py-2 rounded-xl text-xs font-bold bg-cyan-500 text-black transition whitespace-nowrap shadow-md" data-cat="all">All Services</button>
+      <button onclick="filterCategory('virtual_numbers')" class="cat-btn px-3.5 py-2 rounded-xl text-xs font-bold bg-brand-card text-gray-300 hover:bg-slate-800 transition whitespace-nowrap border border-brand-border" data-cat="virtual_numbers">Foreign Numbers</button>
+      <button onclick="filterCategory('gmail')" class="cat-btn px-3.5 py-2 rounded-xl text-xs font-bold bg-brand-card text-gray-300 hover:bg-slate-800 transition whitespace-nowrap border border-brand-border" data-cat="gmail">Gmail Accounts</button>
+      <button onclick="filterCategory('esim')" class="cat-btn px-3.5 py-2 rounded-xl text-xs font-bold bg-brand-card text-gray-300 hover:bg-slate-800 transition whitespace-nowrap border border-brand-border" data-cat="esim">eSIM Data Plans</button>
+      <button onclick="filterCategory('social')" class="cat-btn px-3.5 py-2 rounded-xl text-xs font-bold bg-brand-card text-gray-300 hover:bg-slate-800 transition whitespace-nowrap border border-brand-border" data-cat="social">Social Accounts</button>
     </div>
 
-    <div id="product-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 mt-2"></div>
+    <div id="product-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 mt-1"></div>
   </main>
 
-  <footer class="glass-nav mt-12 py-6 border-t border-brand-border">
-    <div class="max-w-7xl mx-auto px-4 text-center">
-      <p class="text-xs text-gray-400 font-medium">© XyzTech 2026 | All Rights Reserved</p>
+  <footer class="glass-nav mt-8 py-5 border-t border-brand-border">
+    <div class="max-w-7xl mx-auto px-3 text-center">
+      <p class="text-[11px] text-gray-400 font-medium">© XyzTech 2026 | All Rights Reserved</p>
     </div>
   </footer>
 
   <!-- Cart Drawer -->
   <div id="cart-drawer" class="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm opacity-0 pointer-events-none transition-opacity duration-300">
-    <div class="absolute right-0 top-0 bottom-0 w-full max-w-md bg-brand-dark border-l border-brand-border p-6 flex flex-col justify-between">
+    <div class="absolute right-0 top-0 bottom-0 w-full max-w-sm bg-brand-dark border-l border-brand-border p-5 flex flex-col justify-between">
       <div>
-        <div class="flex items-center justify-between border-b border-brand-border pb-4 mb-4">
-          <h3 class="font-heading font-bold text-xl text-white flex items-center gap-2"><i class="fa-solid fa-basket-shopping text-cyan-400"></i> Your Order Cart</h3>
-          <button onclick="toggleCart()" class="text-gray-400 hover:text-white text-lg"><i class="fa-solid fa-xmark"></i></button>
+        <div class="flex items-center justify-between border-b border-brand-border pb-3 mb-3">
+          <h3 class="font-heading font-bold text-lg text-white flex items-center gap-2"><i class="fa-solid fa-basket-shopping text-cyan-400"></i> Your Order Cart</h3>
+          <button onclick="toggleCart()" class="text-gray-400 hover:text-white text-base"><i class="fa-solid fa-xmark"></i></button>
         </div>
-        <div id="cart-items" class="space-y-3 max-h-[60vh] overflow-y-auto custom-scrollbar pr-1"></div>
+        <div id="cart-items" class="space-y-2.5 max-h-[55vh] overflow-y-auto custom-scrollbar pr-1"></div>
       </div>
-      <div class="border-t border-brand-border pt-4">
-        <div class="flex justify-between items-center mb-4">
-          <span class="text-sm text-gray-400 font-semibold">Total Amount:</span>
-          <span id="cart-total" class="text-2xl font-bold font-heading text-cyan-400">₦0</span>
+      <div class="border-t border-brand-border pt-3">
+        <div class="flex justify-between items-center mb-3">
+          <span class="text-xs text-gray-400 font-semibold">Total Amount:</span>
+          <span id="cart-total" class="text-xl font-bold font-heading text-cyan-400">₦0</span>
         </div>
-        <button onclick="proceedToCheckout()" class="w-full py-3 rounded-xl bg-gradient-to-r from-cyan-500 to-emerald-500 text-black font-heading font-bold text-lg hover:opacity-95 transition">CONFIRM ORDER & PAY</button>
+        <button onclick="proceedToCheckout()" class="w-full py-3 rounded-xl bg-gradient-to-r from-cyan-500 to-emerald-500 text-black font-heading font-bold text-sm hover:opacity-95 transition shadow-lg">CHECKOUT & PAY</button>
       </div>
     </div>
   </div>
 
-  <!-- Auth Modal -->
-  <div id="auth-modal" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 hidden">
-    <div class="bg-brand-card border border-brand-border rounded-2xl w-full max-w-md p-6 relative">
-      <button onclick="closeAuthModal()" class="absolute top-4 right-4 text-gray-400 hover:text-white"><i class="fa-solid fa-xmark text-lg"></i></button>
-      <div class="flex border-b border-brand-border mb-6">
-        <button id="tab-login" onclick="switchAuthTab('login')" class="flex-1 py-2 font-heading font-bold text-lg text-cyan-400 border-b-2 border-cyan-400">LOG IN</button>
-        <button id="tab-signup" onclick="switchAuthTab('signup')" class="flex-1 py-2 font-heading font-bold text-lg text-gray-400 border-b-2 border-transparent">SIGN UP</button>
+  <!-- Wallet Funding Modal -->
+  <div id="wallet-modal" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-3 hidden">
+    <div class="bg-brand-card border border-brand-border rounded-2xl w-full max-w-sm p-5 relative shadow-2xl">
+      <button onclick="closeWalletModal()" class="absolute top-4 right-4 text-gray-400 hover:text-white"><i class="fa-solid fa-xmark"></i></button>
+      <h3 class="font-heading font-bold text-xl text-cyan-400 mb-2"><i class="fa-solid fa-wallet mr-1.5"></i> Fund Your Wallet</h3>
+      <p class="text-xs text-gray-400 mb-4">Transfer to our bank account below, then input the amount to credit your balance instantly.</p>
+      
+      <div class="p-3 bg-slate-900 border border-emerald-500/30 rounded-xl mb-4">
+        <div class="text-[11px] text-emerald-400 font-bold uppercase">OPay Transfer Details</div>
+        <div class="text-sm font-bold text-white mt-0.5">Account: <span class="text-cyan-300 font-mono">9022370895</span></div>
+        <div class="text-xs text-gray-300">Name: Balogun Azeez</div>
       </div>
-      <form id="form-login" onsubmit="handleLogin(event)" class="space-y-4">
-        <div><label class="block text-xs font-semibold text-gray-400 mb-1">Email Address</label><input type="email" id="login-email" required class="w-full bg-slate-900 border border-brand-border rounded-xl px-4 py-2.5 text-sm text-white focus:border-cyan-400 focus:outline-none"></div>
-        <div><label class="block text-xs font-semibold text-gray-400 mb-1">Password</label><input type="password" id="login-pass" required class="w-full bg-slate-900 border border-brand-border rounded-xl px-4 py-2.5 text-sm text-white focus:border-cyan-400 focus:outline-none"></div>
-        <button type="submit" class="w-full py-3 rounded-xl bg-cyan-500 text-black font-heading font-bold text-base hover:bg-cyan-400 transition mt-2">LOG IN TO ACCOUNT</button>
+
+      <form id="wallet-fund-form" onsubmit="submitWalletFunding(event)" class="space-y-3">
+        <div>
+          <label class="block text-xs font-semibold text-gray-400 mb-1">Amount Funded (₦)</label>
+          <input type="number" id="fund-amount" required placeholder="5000" class="w-full bg-slate-900 border border-brand-border rounded-xl px-3 py-2.5 text-sm text-white focus:border-cyan-400 focus:outline-none">
+        </div>
+        <button type="submit" class="w-full py-2.5 rounded-xl bg-emerald-500 text-black font-heading font-bold text-sm hover:bg-emerald-400 transition shadow-md">CREDIT WALLET BALANCE</button>
       </form>
-      <form id="form-signup" onsubmit="handleSignup(event)" class="space-y-4 hidden">
-        <div><label class="block text-xs font-semibold text-gray-400 mb-1">Email Address</label><input type="email" id="signup-email" required class="w-full bg-slate-900 border border-brand-border rounded-xl px-4 py-2.5 text-sm text-white focus:border-cyan-400 focus:outline-none"></div>
-        <div><label class="block text-xs font-semibold text-gray-400 mb-1">Password (Min 6 chars)</label><input type="password" id="signup-pass" required class="w-full bg-slate-900 border border-brand-border rounded-xl px-4 py-2.5 text-sm text-white focus:border-cyan-400 focus:outline-none"></div>
-        <button type="submit" class="w-full py-3 rounded-xl bg-emerald-500 text-black font-heading font-bold text-base hover:bg-emerald-400 transition mt-2">CREATE ACCOUNT</button>
+    </div>
+  </div>
+
+  <!-- Auth Modal -->
+  <div id="auth-modal" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-3 hidden">
+    <div class="bg-brand-card border border-brand-border rounded-2xl w-full max-w-sm p-5 relative shadow-2xl">
+      <button onclick="closeAuthModal()" class="absolute top-4 right-4 text-gray-400 hover:text-white"><i class="fa-solid fa-xmark"></i></button>
+      
+      <div class="flex border-b border-brand-border mb-5">
+        <button id="tab-login" onclick="switchAuthTab('login')" class="flex-1 py-2 font-heading font-bold text-base text-cyan-400 border-b-2 border-cyan-400">LOG IN</button>
+        <button id="tab-signup" onclick="switchAuthTab('signup')" class="flex-1 py-2 font-heading font-bold text-base text-gray-400 border-b-2 border-transparent">SIGN UP</button>
+      </div>
+
+      <!-- Login Form -->
+      <form id="form-login" onsubmit="handleLogin(event)" class="space-y-3.5">
+        <div id="auth-alert-login" class="hidden"></div>
+
+        <div>
+          <label class="block text-xs font-semibold text-gray-400 mb-1">Email Address</label>
+          <div class="relative">
+            <i class="fa-solid fa-envelope absolute left-3.5 top-3.5 text-gray-500 text-xs"></i>
+            <input type="email" id="login-email" required placeholder="Enter your email address" class="w-full bg-slate-900 border border-brand-border rounded-xl pl-10 pr-3 py-2.5 text-xs text-white focus:border-cyan-400 focus:outline-none">
+          </div>
+        </div>
+
+        <div>
+          <div class="flex justify-between items-center mb-1">
+            <label class="block text-xs font-semibold text-gray-400">Password / Passkey</label>
+            <button type="button" onclick="handleForgotPassword()" class="text-[10px] text-cyan-400 hover:underline font-semibold">Forgot Password?</button>
+          </div>
+          <div class="relative">
+            <i class="fa-solid fa-lock absolute left-3.5 top-3.5 text-gray-500 text-xs"></i>
+            <input type="password" id="login-pass" required placeholder="Enter your password" class="w-full bg-slate-900 border border-brand-border rounded-xl pl-10 pr-9 py-2.5 text-xs text-white focus:border-cyan-400 focus:outline-none">
+            <i id="eye-login" onclick="togglePassword('login-pass', 'eye-login')" class="fa-solid fa-eye absolute right-3 top-3.5 text-gray-400 hover:text-white cursor-pointer text-xs"></i>
+          </div>
+        </div>
+
+        <button type="submit" class="w-full py-2.5 rounded-xl bg-cyan-500 text-black font-heading font-bold text-sm hover:bg-cyan-400 transition mt-2 shadow-md">LOG IN TO ACCOUNT</button>
+      </form>
+
+      <!-- Signup Form -->
+      <form id="form-signup" onsubmit="handleSignup(event)" class="space-y-3.5 hidden">
+        <div id="auth-alert-signup" class="hidden"></div>
+
+        <div>
+          <label class="block text-xs font-semibold text-gray-400 mb-1">Full Name</label>
+          <div class="relative">
+            <i class="fa-solid fa-id-card absolute left-3.5 top-3.5 text-gray-500 text-xs"></i>
+            <input type="text" id="signup-fullname" required placeholder="Enter your full name" class="w-full bg-slate-900 border border-brand-border rounded-xl pl-10 pr-3 py-2.5 text-xs text-white focus:border-cyan-400 focus:outline-none">
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-xs font-semibold text-gray-400 mb-1">Username</label>
+          <div class="relative">
+            <i class="fa-solid fa-at absolute left-3.5 top-3.5 text-gray-500 text-xs"></i>
+            <input type="text" id="signup-username" required placeholder="Choose a username" class="w-full bg-slate-900 border border-brand-border rounded-xl pl-10 pr-3 py-2.5 text-xs text-white focus:border-cyan-400 focus:outline-none">
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-xs font-semibold text-gray-400 mb-1">Email Address</label>
+          <div class="relative">
+            <i class="fa-solid fa-envelope absolute left-3.5 top-3.5 text-gray-500 text-xs"></i>
+            <input type="email" id="signup-email" required placeholder="Enter your email address" class="w-full bg-slate-900 border border-brand-border rounded-xl pl-10 pr-3 py-2.5 text-xs text-white focus:border-cyan-400 focus:outline-none">
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-xs font-semibold text-gray-400 mb-1">Password (Min 6 chars)</label>
+          <div class="relative">
+            <i class="fa-solid fa-lock absolute left-3.5 top-3.5 text-gray-500 text-xs"></i>
+            <input type="password" id="signup-pass" required placeholder="Create a password" class="w-full bg-slate-900 border border-brand-border rounded-xl pl-10 pr-9 py-2.5 text-xs text-white focus:border-cyan-400 focus:outline-none">
+            <i id="eye-signup" onclick="togglePassword('signup-pass', 'eye-signup')" class="fa-solid fa-eye absolute right-3 top-3.5 text-gray-400 hover:text-white cursor-pointer text-xs"></i>
+          </div>
+        </div>
+
+        <button type="submit" class="w-full py-2.5 rounded-xl bg-emerald-500 text-black font-heading font-bold text-sm hover:bg-emerald-400 transition mt-2 shadow-md">CREATE ACCOUNT</button>
       </form>
     </div>
   </div>
 
   <!-- Admin Modal -->
-  <div id="admin-modal" class="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4 hidden">
-    <div class="bg-brand-card border border-purple-500/30 rounded-2xl w-full max-w-2xl p-6 relative max-h-[90vh] overflow-y-auto custom-scrollbar">
-      <button onclick="closeAdminModal()" class="absolute top-4 right-4 text-gray-400 hover:text-white"><i class="fa-solid fa-xmark text-lg"></i></button>
-      <h3 class="font-heading font-bold text-2xl text-purple-400 mb-4 flex items-center gap-2"><i class="fa-solid fa-sliders"></i> XyzSmsv Admin Panel</h3>
-      <p class="text-xs text-gray-400 mb-4">Connected securely with your Firebase Backend.</p>
+  <div id="admin-modal" class="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-3 hidden">
+    <div class="bg-brand-card border border-purple-500/30 rounded-2xl w-full max-w-md p-5 relative shadow-2xl max-h-[90vh] overflow-y-auto custom-scrollbar">
+      <button onclick="closeAdminModal()" class="absolute top-4 right-4 text-gray-400 hover:text-white"><i class="fa-solid fa-xmark"></i></button>
+      
+      <!-- Step 1 -->
+      <div id="admin-security-step" class="space-y-3.5">
+        <div class="w-10 h-10 rounded-xl bg-purple-500/20 text-purple-400 flex items-center justify-center font-bold text-lg mb-1">
+          <i class="fa-solid fa-shield-halved"></i>
+        </div>
+        <h3 class="font-heading font-bold text-xl text-purple-300">Admin Authentication</h3>
+        <p class="text-xs text-gray-400">Enter your secure admin passkey to access project controls.</p>
+        
+        <div>
+          <label class="block text-xs font-semibold text-gray-400 mb-1">Admin Passkey</label>
+          <input type="password" id="admin-secret-pass" placeholder="••••••••" class="w-full bg-slate-900 border border-purple-500/30 rounded-xl px-3 py-2.5 text-xs text-white focus:border-purple-400 focus:outline-none">
+        </div>
+
+        <button onclick="verifyAdminPassword()" class="w-full py-2.5 rounded-xl bg-purple-600 text-white font-heading font-bold text-xs hover:bg-purple-500 transition">UNLOCK ADMIN PANEL</button>
+      </div>
+
+      <!-- Step 2 -->
+      <div id="admin-content-step" class="space-y-3.5 hidden">
+        <div class="flex items-center justify-between border-b border-purple-500/20 pb-2.5">
+          <h3 class="font-heading font-bold text-xl text-purple-400 flex items-center gap-1.5"><i class="fa-solid fa-sliders"></i> Admin Control Hub</h3>
+          <span class="px-2 py-0.5 rounded-lg bg-purple-500/20 text-purple-300 text-[10px] font-bold border border-purple-500/30">SuperAdmin</span>
+        </div>
+
+        <form id="admin-add-prod-form" onsubmit="addNewProduct(event)" class="space-y-3">
+          <h4 class="text-xs font-bold uppercase tracking-wider text-gray-300">Add New Item to Marketplace</h4>
+          
+          <div>
+            <label class="block text-[11px] font-semibold text-gray-400 mb-1">Item Title</label>
+            <input type="text" id="prod-title" required placeholder="e.g. Netherlands eSIM Plan" class="w-full bg-slate-900 border border-brand-border rounded-xl px-3 py-2 text-xs text-white focus:border-purple-400 focus:outline-none">
+          </div>
+
+          <div class="grid grid-cols-2 gap-2">
+            <div>
+              <label class="block text-[11px] font-semibold text-gray-400 mb-1">Category</label>
+              <select id="prod-category" class="w-full bg-slate-900 border border-brand-border rounded-xl px-3 py-2 text-xs text-white focus:border-purple-400 focus:outline-none">
+                <option value="virtual_numbers">Foreign Numbers</option>
+                <option value="gmail">Gmail Accounts</option>
+                <option value="esim">eSIM Data Plans</option>
+                <option value="social">Social Accounts</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-[11px] font-semibold text-gray-400 mb-1">Badge Tag</label>
+              <input type="text" id="prod-badge" placeholder="e.g. Instant QR" class="w-full bg-slate-900 border border-brand-border rounded-xl px-3 py-2 text-xs text-white focus:border-purple-400 focus:outline-none">
+            </div>
+          </div>
+
+          <div class="grid grid-cols-2 gap-2">
+            <div>
+              <label class="block text-[11px] font-semibold text-gray-400 mb-1">Price (₦)</label>
+              <input type="number" id="prod-price" required placeholder="3000" class="w-full bg-slate-900 border border-brand-border rounded-xl px-3 py-2 text-xs text-white focus:border-purple-400 focus:outline-none">
+            </div>
+            <div>
+              <label class="block text-[11px] font-semibold text-gray-400 mb-1">Stock Quantity</label>
+              <input type="number" id="prod-stock" required placeholder="15" class="w-full bg-slate-900 border border-brand-border rounded-xl px-3 py-2 text-xs text-white focus:border-purple-400 focus:outline-none">
+            </div>
+          </div>
+
+          <div>
+            <label class="block text-[11px] font-semibold text-gray-400 mb-1">Item Description</label>
+            <textarea id="prod-details" required rows="2" placeholder="Briefly describe what the customer is buying..." class="w-full bg-slate-900 border border-brand-border rounded-xl px-3 py-2 text-xs text-white focus:border-purple-400 focus:outline-none"></textarea>
+          </div>
+
+          <button type="submit" class="w-full py-2.5 rounded-xl bg-purple-600 text-white font-heading font-bold text-xs hover:bg-purple-500 transition shadow-md">PUBLISH TO STOREFRONT</button>
+        </form>
+      </div>
     </div>
   </div>
+
 </body>
 </html>
